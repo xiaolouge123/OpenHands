@@ -64,6 +64,7 @@ FUNCTION_CALLING_SUPPORTED_MODELS = [
     'o1-2024-12-17',
     'o3-mini-2025-01-31',
     'o3-mini',
+    'deepseek-chat',
 ]
 
 REASONING_EFFORT_SUPPORTED_MODELS = [
@@ -71,6 +72,7 @@ REASONING_EFFORT_SUPPORTED_MODELS = [
     'o1',
     'o3-mini-2025-01-31',
     'o3-mini',
+    'deepseek-reasoner',
 ]
 
 MODELS_WITHOUT_STOP_WORDS = [
@@ -157,9 +159,9 @@ class LLM(RetryMixin, DebugMixin):
         self._completion = partial(
             litellm_completion,
             model=self.config.model,
-            api_key=self.config.api_key.get_secret_value()
-            if self.config.api_key
-            else None,
+            api_key=(
+                self.config.api_key.get_secret_value() if self.config.api_key else None
+            ),
             base_url=self.config.base_url,
             api_version=self.config.api_version,
             custom_llm_provider=self.config.custom_llm_provider,

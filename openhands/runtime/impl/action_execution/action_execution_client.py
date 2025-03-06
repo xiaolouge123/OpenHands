@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any
@@ -104,6 +105,7 @@ class ActionExecutionClient(Runtime):
         return send_request(self.session, method, url, **kwargs)
 
     def check_if_alive(self) -> None:
+        time.sleep(30)
         with self._send_action_server_request(
             'GET',
             f'{self._get_action_execution_server_host()}/alive',
