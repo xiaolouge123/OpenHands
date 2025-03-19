@@ -5,10 +5,11 @@ from litellm import (
     ModelResponse,
 )
 
-from openhands.agenthub.deepplanner_agent.tools import (
+from openhands.agenthub.deepcoder_agent.tools import (
     CmdRunTool,
     DelegateTool,
     FinishTool,
+    IPythonTool,
     StrReplaceEditorTool,
 )
 from openhands.core.exceptions import (
@@ -22,20 +23,11 @@ from openhands.events.action import (
     CmdRunAction,
     FileEditAction,
     FileReadAction,
+    IPythonRunCellAction,
     MessageAction,
 )
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
-
-
-def combine_thought(action: Action, thought: str) -> Action:
-    if not hasattr(action, 'thought'):
-        return action
-    if thought and action.thought:
-        action.thought = f'{thought}\n{action.thought}'
-    elif thought:
-        action.thought = thought
-    return action
 
 
 def response_to_actions(response: ModelResponse) -> list[Action]:
@@ -70,6 +62,12 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                 # convert is_input to boolean
                 is_input = arguments.get('is_input', 'false') == 'true'
                 action = CmdRunAction(command=arguments['command'], is_input=is_input)
+            elif tool_call.function.name == IPythonTool['function']['name']:
+                if 'code' not in arguments:
+                    raise FunctionCallValidationError(
+                        f'Missing required argument "code" in tool call {tool_call.function.name}'
+                    )
+                action = IPythonRunCellAction(code=arguments['code'])
             elif tool_call.function.name == StrReplaceEditorTool['function']['name']:
                 if 'command' not in arguments:
                     raise FunctionCallValidationError(
@@ -119,9 +117,6 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                     f'Tool {tool_call.function.name} is not registered. (arguments: {arguments}). Please check the tool name and retry with an existing tool.'
                 )
 
-            # We only add thought to the first action
-            if i == 0:
-                action = combine_thought(action, thought)
             # Add metadata for tool calling
             action.tool_call_metadata = ToolCallMetadata(
                 tool_call_id=tool_call.id,
@@ -143,5 +138,5 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
 
 
 def get_tools() -> list[ChatCompletionToolParam]:
-    tools = [CmdRunTool, FinishTool, StrReplaceEditorTool, DelegateTool]
+    tools = [CmdRunTool, FinishTool, StrReplaceEditorTool, DelegateTool, IPythonTool]
     return tools

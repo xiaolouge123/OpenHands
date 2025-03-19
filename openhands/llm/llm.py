@@ -14,7 +14,7 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import litellm
 
-from litellm import ChatCompletionMessageToolCall, ModelInfo, PromptTokensDetails
+from litellm import ChatCompletionMessageToolCall, ModelInfo
 from litellm import Message as LiteLLMMessage
 from litellm import completion as litellm_completion
 from litellm import completion_cost as litellm_completion_cost
@@ -65,6 +65,7 @@ FUNCTION_CALLING_SUPPORTED_MODELS = [
     'o3-mini-2025-01-31',
     'o3-mini',
     'deepseek-chat',
+    'gpt-4.5-preview-2025-02-27',
 ]
 
 REASONING_EFFORT_SUPPORTED_MODELS = [
@@ -530,12 +531,13 @@ class LLM(RetryMixin, DebugMixin):
                 )
 
             # read the prompt cache hit, if any
-            prompt_tokens_details: PromptTokensDetails = usage.get(
-                'prompt_tokens_details'
-            )
-            cache_hit_tokens = (
-                prompt_tokens_details.cached_tokens if prompt_tokens_details else 0
-            )
+            # prompt_tokens_details: PromptTokensDetails = usage.get(
+            #     'prompt_tokens_details'
+            # )
+            cache_hit_tokens = 0
+            # (
+            #     prompt_tokens_details.cached_tokens if prompt_tokens_details else 0
+            # )
             if cache_hit_tokens:
                 stats += 'Input tokens (cache hit): ' + str(cache_hit_tokens) + '\n'
 

@@ -1,3 +1,8 @@
+"""This file contains the function calling implementation for different actions.
+
+This is similar to the functionality of `CodeActResponseParser`.
+"""
+
 import json
 
 from litellm import (
@@ -5,11 +10,12 @@ from litellm import (
     ModelResponse,
 )
 
-from openhands.agenthub.deepplanner_agent.tools import (
-    CmdRunTool,
-    DelegateTool,
+from openhands.agenthub.browser_monitor_agent.tools import (
+    BrowserListenTool,
+    BrowserTool,
     FinishTool,
     StrReplaceEditorTool,
+    WebReadTool,
 )
 from openhands.core.exceptions import (
     FunctionCallNotExistsError,
@@ -17,9 +23,9 @@ from openhands.core.exceptions import (
 )
 from openhands.events.action import (
     Action,
-    AgentDelegateAction,
     AgentFinishAction,
-    CmdRunAction,
+    BrowseInteractiveAction,
+    BrowseURLAction,
     FileEditAction,
     FileReadAction,
     MessageAction,
@@ -41,7 +47,8 @@ def combine_thought(action: Action, thought: str) -> Action:
 def response_to_actions(response: ModelResponse) -> list[Action]:
     actions: list[Action] = []
     assert len(response.choices) == 1, 'Only one choice is supported for now'
-    assistant_msg = response.choices[0].message
+    choice = response.choices[0]
+    assistant_msg = choice.message
     if hasattr(assistant_msg, 'tool_calls') and assistant_msg.tool_calls:
         # Check if there's assistant_msg.content. If so, add it to the thought
         thought = ''
@@ -58,18 +65,19 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
             try:
                 arguments = json.loads(tool_call.function.arguments)
             except json.decoder.JSONDecodeError as e:
-                print(f'Failed to parse tool call: {tool_call}')
                 raise RuntimeError(
                     f'Failed to parse tool call arguments: {tool_call.function.arguments}'
                 ) from e
-            if tool_call.function.name == CmdRunTool['function']['name']:
-                if 'command' not in arguments:
-                    raise FunctionCallValidationError(
-                        f'Missing required argument "command" in tool call {tool_call.function.name}'
-                    )
-                # convert is_input to boolean
-                is_input = arguments.get('is_input', 'false') == 'true'
-                action = CmdRunAction(command=arguments['command'], is_input=is_input)
+            # ================================================
+            # AgentFinishAction
+            # ================================================
+            if tool_call.function.name == FinishTool['function']['name']:
+                action = AgentFinishAction(
+                    final_thought=arguments.get('message', ''),
+                    task_completed=arguments.get('task_completed', None),
+                    outputs={'content': arguments.get('message', '')},
+                )
+
             elif tool_call.function.name == StrReplaceEditorTool['function']['name']:
                 if 'command' not in arguments:
                     raise FunctionCallValidationError(
@@ -101,19 +109,31 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                         impl_source=FileEditSource.OH_ACI,
                         **other_kwargs,
                     )
-            elif tool_call.function.name == FinishTool['function']['name']:
-                if arguments.get('task_completed', None):
-                    action = AgentFinishAction(
-                        final_thought=arguments.get('message', ''),
-                        task_completed=arguments.get('task_completed', None),
+
+            # ================================================
+            # BrowserTool
+            # ================================================
+            elif tool_call.function.name == BrowserTool['function']['name']:
+                if 'code' not in arguments:
+                    raise FunctionCallValidationError(
+                        f'Missing required argument "code" in tool call {tool_call.function.name}'
                     )
-                else:
-                    action = MessageAction(
-                        content=arguments.get('message', ''),
-                        wait_for_response=True,
+                action = BrowseInteractiveAction(browser_actions=arguments['code'])
+
+            # ================================================
+            # WebReadTool (simplified browsing)
+            # ================================================
+            elif tool_call.function.name == WebReadTool['function']['name']:
+                if 'url' not in arguments:
+                    raise FunctionCallValidationError(
+                        f'Missing required argument "url" in tool call {tool_call.function.name}'
                     )
-            elif tool_call.function.name == DelegateTool['function']['name']:
-                action = AgentDelegateAction(**arguments)
+                action = BrowseURLAction(url=arguments['url'])
+            # ================================================
+            # BrowserListenTool
+            # ================================================
+            elif tool_call.function.name == BrowserListenTool['function']['name']:
+                action = BrowseInteractiveAction(browser_actions=arguments['code'])
             else:
                 raise FunctionCallNotExistsError(
                     f'Tool {tool_call.function.name} is not registered. (arguments: {arguments}). Please check the tool name and retry with an existing tool.'
@@ -142,6 +162,10 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
     return actions
 
 
-def get_tools() -> list[ChatCompletionToolParam]:
-    tools = [CmdRunTool, FinishTool, StrReplaceEditorTool, DelegateTool]
+def get_tools(
+    browser_enable_listening: bool = False,
+) -> list[ChatCompletionToolParam]:
+    tools = [FinishTool, BrowserTool, StrReplaceEditorTool, WebReadTool]
+    if browser_enable_listening:
+        tools.append(BrowserListenTool)
     return tools

@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import time
 from typing import Callable
 
@@ -68,6 +70,7 @@ class AgentSession:
         self._status_callback = status_callback
         self.github_user_id = github_user_id
         self._monitoring_listener = monitoring_listener
+        self.save_trajectory_path: str | None = None
 
     async def start(
         self,
@@ -142,6 +145,11 @@ class AgentSession:
                     EventSource.ENVIRONMENT,
                 )
             finished = True
+
+            if config.save_trajectory_path is not None and isinstance(
+                config.save_trajectory_path, str
+            ):
+                self.save_trajectory_path = config.save_trajectory_path
         finally:
             self._starting = False
             success = finished and runtime_connected
@@ -170,6 +178,15 @@ class AgentSession:
             end_state = self.controller.get_state()
             end_state.save_to_session(self.sid, self.file_store)
             await self.controller.close()
+        if self.save_trajectory_path is not None and self.controller is not None:
+            if os.path.isdir(self.save_trajectory_path):
+                file_path = os.path.join(self.save_trajectory_path, self.sid + '.json')
+            else:
+                file_path = self.save_trajectory_path
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            histories = self.controller.get_trajectory()
+            with open(file_path, 'w') as f:
+                json.dump(histories, f, ensure_ascii=False)
         if self.runtime is not None:
             self.runtime.close()
         if self.security_analyzer is not None:

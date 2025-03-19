@@ -233,8 +233,9 @@ def create_condenser_config(condenser_type: str, data: dict) -> CondenserConfig:
         'llm': LLMSummarizingCondenserConfig,
         'amortized': AmortizedForgettingCondenserConfig,
         'llm_attention': LLMAttentionCondenserConfig,
+        'browser_output_masking': BrowserOutputCondenserConfig,
     }
-
+    logger.openhands_logger.info(f'Creating Condenser type: {condenser_type}')
     if condenser_type not in condenser_classes:
         raise ValueError(f'Unknown condenser type: {condenser_type}')
 

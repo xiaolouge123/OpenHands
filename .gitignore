@@ -213,6 +213,7 @@ logs
 # agent
 .envrc
 /workspace
+/trajectories
 /_test_workspace
 /debug
 cache

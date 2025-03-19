@@ -121,6 +121,7 @@ class BrowsingAgent(Agent):
             strict=False,  # less strict on the parsing of the actions
             multiaction=True,  # enable to agent to take multiple actions at once
         )
+        logger.info(f'BrowsingAgent action space: {self.action_space}')
 
         self.reset()
 

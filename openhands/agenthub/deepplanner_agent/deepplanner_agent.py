@@ -2,40 +2,37 @@ import json
 import os
 from collections import deque
 
-from litellm import ModelResponse
-
 import openhands.agenthub.deepplanner_agent.function_calling as deepplanner_function_calling
 from openhands.controller.agent import Agent
 from openhands.controller.state.state import State
 from openhands.core.config import AgentConfig
 from openhands.core.logger import openhands_logger as logger
-from openhands.core.message import ImageContent, Message, TextContent
+from openhands.core.message import Message
 from openhands.events.action import (
     Action,
-    AgentDelegateAction,
     AgentFinishAction,
-    CmdRunAction,
-    FileEditAction,
-    FileReadAction,
-    MessageAction,
 )
-from openhands.events.observation import (
-    AgentCondensationObservation,
-    AgentDelegateObservation,
-    CmdOutputObservation,
-    FileEditObservation,
-    FileReadObservation,
-    UserRejectObservation,
-)
-from openhands.events.observation.error import ErrorObservation
-from openhands.events.observation.observation import Observation
-from openhands.events.serialization.event import truncate_content
+from openhands.events.observation import AgentDelegateObservation
 from openhands.llm.llm import LLM
 from openhands.memory.condenser import Condenser
+from openhands.memory.conversation_memory import ConversationMemory
+from openhands.runtime.plugins import (
+    AgentSkillsRequirement,
+    JupyterRequirement,
+    PluginRequirement,
+)
 from openhands.utils.prompt import PromptManager
 
 
 class DeepPlannerAgent(Agent):
+    sandbox_plugins: list[PluginRequirement] = [
+        # NOTE: AgentSkillsRequirement need to go before JupyterRequirement, since
+        # AgentSkillsRequirement provides a lot of Python functions,
+        # and it needs to be initialized before Jupyter for Jupyter to use those functions.
+        AgentSkillsRequirement(),
+        JupyterRequirement(),
+    ]
+
     def __init__(self, llm: LLM, config: AgentConfig):
         super().__init__(llm, config)
         self.pending_actions: deque[Action] = deque()
@@ -60,216 +57,14 @@ class DeepPlannerAgent(Agent):
             disabled_microagents=[],
         )
 
+        # Create a ConversationMemory instance
+        self.conversation_memory = ConversationMemory(self.prompt_manager)
+
         self.condenser = Condenser.from_config(self.config.condenser)
-        logger.debug(f'Using condenser: {self.condenser}')
+        logger.debug(f'Using condenser in DeepPlannerAgent: {self.condenser}')
 
-    def get_action_message(
-        self,
-        action: Action,
-        pending_tool_call_action_messages: dict[str, Message],
-    ) -> list[Message]:
-        """Converts an action into a message format that can be sent to the LLM.
-
-        This method handles different types of actions and formats them appropriately:
-        1. For tool-based actions (AgentDelegate, CmdRun, FileEdit) and agent-sourced AgentFinish:
-            - In function calling mode: Stores the LLM's response in pending_tool_call_action_messages
-            - In non-function calling mode: Creates a message with the action string
-        2. For MessageActions: Creates a message with the text content and optional image content
-
-        Args:
-            action (Action): The action to convert. Can be one of:
-                - CmdRunAction: For executing bash commands
-                - FileEditAction: For editing files
-                - FileReadAction: For reading files using openhands-aci commands
-                - AgentFinishAction: For ending the interaction
-                - MessageAction: For sending messages
-            pending_tool_call_action_messages (dict[str, Message]): Dictionary mapping response IDs
-                to their corresponding messages. Used in function calling mode to track tool calls
-                that are waiting for their results.
-
-        Returns:
-            list[Message]: A list containing the formatted message(s) for the action.
-                May be empty if the action is handled as a tool call in function calling mode.
-
-        Note:
-            In function calling mode, tool-based actions are stored in pending_tool_call_action_messages
-            rather than being returned immediately. They will be processed later when all corresponding
-            tool call results are available.
-        """
-        # create a regular message from an event
-        if isinstance(
-            action,
-            (
-                AgentDelegateAction,
-                FileEditAction,
-                FileReadAction,
-            ),
-        ) or (isinstance(action, CmdRunAction) and action.source == 'agent'):
-            tool_metadata = action.tool_call_metadata
-            assert tool_metadata is not None, (
-                'Tool call metadata should NOT be None when function calling is enabled. Action: '
-                + str(action)
-            )
-
-            llm_response: ModelResponse = tool_metadata.model_response
-            assistant_msg = llm_response.choices[0].message
-
-            # Add the LLM message (assistant) that initiated the tool calls
-            # (overwrites any previous message with the same response_id)
-            logger.debug(
-                f'Tool calls type: {type(assistant_msg.tool_calls)}, value: {assistant_msg.tool_calls}'
-            )
-            pending_tool_call_action_messages[llm_response.id] = Message(
-                role=assistant_msg.role,
-                # tool call content SHOULD BE a string
-                content=(
-                    [TextContent(text=assistant_msg.content or '')]
-                    if assistant_msg.content is not None
-                    else []
-                ),
-                tool_calls=assistant_msg.tool_calls,
-            )
-            return []
-        elif isinstance(action, AgentFinishAction):
-            role = 'user' if action.source == 'user' else 'assistant'
-
-            # when agent finishes, it has tool_metadata
-            # which has already been executed, and it doesn't have a response
-            # when the user finishes (/exit), we don't have tool_metadata
-            tool_metadata = action.tool_call_metadata
-            if tool_metadata is not None:
-                # take the response message from the tool call
-                assistant_msg = tool_metadata.model_response.choices[0].message
-                content = assistant_msg.content or ''
-
-                # save content if any, to thought
-                if action.thought:
-                    if action.thought != content:
-                        action.thought += '\n' + content
-                else:
-                    action.thought = content
-
-                # remove the tool call metadata
-                action.tool_call_metadata = None
-            return [
-                Message(
-                    role=role,
-                    content=[TextContent(text=action.thought)],
-                )
-            ]
-        elif isinstance(action, MessageAction):
-            role = 'user' if action.source == 'user' else 'assistant'
-            content = [TextContent(text=action.content or '')]
-            if self.llm.vision_is_active() and action.image_urls:
-                content.append(ImageContent(image_urls=action.image_urls))
-            return [
-                Message(
-                    role=role,
-                    content=content,
-                )
-            ]
-        elif isinstance(action, CmdRunAction) and action.source == 'user':
-            content = [
-                TextContent(text=f'User executed the command:\n{action.command}')
-            ]
-            return [
-                Message(
-                    role='user',
-                    content=content,
-                )
-            ]
-        return []
-
-    def get_observation_message(
-        self,
-        obs: Observation,
-        tool_call_id_to_message: dict[str, Message],
-    ) -> list[Message]:
-        """Converts an observation into a message format that can be sent to the LLM.
-
-        This method handles different types of observations and formats them appropriately:
-        - CmdOutputObservation: Formats command execution results with exit codes
-        - FileEditObservation: Formats file editing results
-        - FileReadObservation: Formats file reading results from openhands-aci
-        - AgentDelegateObservation: Formats results from delegated agent tasks
-        - ErrorObservation: Formats error messages from failed actions
-        - UserRejectObservation: Formats user rejection messages
-
-        In function calling mode, observations with tool_call_metadata are stored in
-        tool_call_id_to_message for later processing instead of being returned immediately.
-
-        Args:
-            obs (Observation): The observation to convert
-            tool_call_id_to_message (dict[str, Message]): Dictionary mapping tool call IDs
-                to their corresponding messages (used in function calling mode)
-
-        Returns:
-            list[Message]: A list containing the formatted message(s) for the observation.
-                May be empty if the observation is handled as a tool response in function calling mode.
-
-        Raises:
-            ValueError: If the observation type is unknown
-        """
-        message: Message
-        max_message_chars = self.llm.config.max_message_chars
-        if isinstance(obs, CmdOutputObservation):
-            # if it doesn't have tool call metadata, it was triggered by a user action
-            if obs.tool_call_metadata is None:
-                text = truncate_content(
-                    f'\nObserved result of command executed by user:\n{obs.content}',
-                    max_message_chars,
-                )
-            else:
-                text = truncate_content(
-                    obs.content
-                    + f'\n[Python Interpreter: {obs.metadata.py_interpreter_path}]',
-                    max_message_chars,
-                )
-            text += f'\n[Command finished with exit code {obs.exit_code}]'
-            message = Message(role='user', content=[TextContent(text=text)])
-        elif isinstance(obs, FileEditObservation):
-            text = truncate_content(str(obs), max_message_chars)
-            message = Message(role='user', content=[TextContent(text=text)])
-        elif isinstance(obs, FileReadObservation):
-            message = Message(
-                role='user', content=[TextContent(text=obs.content)]
-            )  # Content is already truncated by openhands-aci
-        elif isinstance(obs, AgentDelegateObservation):
-            text = truncate_content(
-                obs.outputs['content'] if 'content' in obs.outputs else '',
-                max_message_chars,
-            )
-            message = Message(role='user', content=[TextContent(text=text)])
-        elif isinstance(obs, ErrorObservation):
-            text = truncate_content(obs.content, max_message_chars)
-            text += '\n[Error occurred in processing last action]'
-            message = Message(role='user', content=[TextContent(text=text)])
-        elif isinstance(obs, UserRejectObservation):
-            text = 'OBSERVATION:\n' + truncate_content(obs.content, max_message_chars)
-            text += '\n[Last action has been rejected by the user]'
-            message = Message(role='user', content=[TextContent(text=text)])
-        elif isinstance(obs, AgentCondensationObservation):
-            text = truncate_content(obs.content, max_message_chars)
-            message = Message(role='user', content=[TextContent(text=text)])
-        else:
-            # If an observation message is not returned, it will cause an error
-            # when the LLM tries to return the next message
-            raise ValueError(f'Unknown observation type: {type(obs)}')
-
-        # Update the message as tool response properly
-        if (tool_call_metadata := obs.tool_call_metadata) is not None:
-            tool_call_id_to_message[tool_call_metadata.tool_call_id] = Message(
-                role='tool',
-                content=message.content,
-                tool_call_id=tool_call_metadata.tool_call_id,
-                name=tool_call_metadata.function_name,
-            )
-            # No need to return the observation message
-            # because it will be added by get_action_message when all the corresponding
-            # tool calls in the SAME request are processed
-            return []
-
-        return [message]
+        # hacking some important information sharing between agents, like workspace directory
+        self.runtime_auxiliary_info = None
 
     def reset(self) -> None:
         """Resets the DeepPlanner Agent."""
@@ -344,78 +139,50 @@ class DeepPlannerAgent(Agent):
               to maintain proper conversation flow
             - Messages from the same role are combined to prevent consecutive same-role messages
         """
-        messages: list[Message] = []
-        if self.prompt_manager is not None:
-            messages = [
-                Message(
-                    role='system',
-                    content=[
-                        TextContent(
-                            text=self.prompt_manager.get_system_message(),
-                            cache_prompt=self.llm.is_caching_prompt_active(),
-                        )
-                    ],
-                )
-            ]
+        if not self.prompt_manager:
+            raise Exception('Prompt Manager not instantiated.')
 
-        pending_tool_call_action_messages: dict[str, Message] = {}
-        tool_call_id_to_message: dict[str, Message] = {}
+        messages = self.conversation_memory.process_initial_messages(
+            with_caching=self.llm.is_caching_prompt_active()
+        )
+        mark = False
+        mark = self._check_delegate_observation(state)
+        # Condense the events from the state.
         events = self.condenser.condensed_history(state)
 
-        for event in events:
-            # create a regular message from an event
-            if isinstance(event, Action):
-                messages_to_add = self.get_action_message(
-                    action=event,
-                    pending_tool_call_action_messages=pending_tool_call_action_messages,
-                )
-            elif isinstance(event, Observation):
-                messages_to_add = self.get_observation_message(
-                    obs=event,
-                    tool_call_id_to_message=tool_call_id_to_message,
-                )
-            else:
-                raise ValueError(f'Unknown event type: {type(event)}')
+        if mark:
+            for event in events:
+                if isinstance(event, AgentDelegateObservation):
+                    logger.info(f'Found delegate observation after condense: {event}')
 
-            # Check pending tool call action messages and see if they are complete
-            _response_ids_to_remove = []
-            for (
-                response_id,
-                pending_message,
-            ) in pending_tool_call_action_messages.items():
-                assert pending_message.tool_calls is not None, (
-                    'Tool calls should NOT be None when function calling is enabled & the message is considered pending tool call. '
-                    f'Pending message: {pending_message}'
-                )
-                if all(
-                    tool_call.id in tool_call_id_to_message
-                    for tool_call in pending_message.tool_calls
-                ):
-                    # If complete:
-                    # -- 1. Add the message that **initiated** the tool calls
-                    messages_to_add.append(pending_message)
-                    # -- 2. Add the tool calls **results***
-                    for tool_call in pending_message.tool_calls:
-                        messages_to_add.append(tool_call_id_to_message[tool_call.id])
-                        tool_call_id_to_message.pop(tool_call.id)
-                    _response_ids_to_remove.append(response_id)
-            # Cleanup the processed pending tool messages
-            for response_id in _response_ids_to_remove:
-                pending_tool_call_action_messages.pop(response_id)
+        logger.info(
+            f'Processing {len(events)} events from a total of {len(state.history)} events'
+        )
+
+        messages = self.conversation_memory.process_events(
+            condensed_history=events,
+            initial_messages=messages,
+            max_message_chars=self.llm.config.max_message_chars,
+            vision_is_active=self.llm.vision_is_active(),
+            enable_som_visual_browsing=self.config.enable_som_visual_browsing,
+        )
 
         if self.llm.is_caching_prompt_active():
-            # NOTE: this is only needed for anthropic
-            # following logic here:
-            # https://github.com/anthropics/anthropic-quickstarts/blob/8f734fd08c425c6ec91ddd613af04ff87d70c5a0/computer-use-demo/computer_use_demo/loop.py#L241-L262
-            breakpoints_remaining = 3  # remaining 1 for system/tool
-            for message in reversed(messages):
-                if message.role == 'user' or message.role == 'tool':
-                    if breakpoints_remaining > 0:
-                        message.content[
-                            -1
-                        ].cache_prompt = True  # Last item inside the message content
-                        breakpoints_remaining -= 1
-                    else:
-                        break
+            self.conversation_memory.apply_prompt_caching(messages)
 
         return messages
+
+    def _take_my_shoes(self):
+        """
+        To improve the agent reasoning ability, inject the reasoning-content to the messages, working as the same purpose as the thinker agent, but no delegation and no thinkaction in the history events.
+        Before the original agent generation completion, inject a user content of context reasoning-content to the messages.
+        """
+        pass
+
+    def _check_delegate_observation(self, state: State) -> bool:
+        events = state.history
+        for event in events:
+            if isinstance(event, AgentDelegateObservation):
+                logger.info(f'Found delegate observation: {event}')
+                return True
+        return False

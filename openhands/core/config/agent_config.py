@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, ValidationError
 
-from openhands.core.config.condenser_config import CondenserConfig, NoOpCondenserConfig
+from openhands.core.config.condenser_config import (
+    BrowserOutputCondenserConfig,
+    CondenserConfig,
+)
 from openhands.core.logger import openhands_logger as logger
 
 
@@ -34,7 +37,11 @@ class AgentConfig(BaseModel):
     disabled_microagents: list[str] = Field(default_factory=list)
     enable_history_truncation: bool = Field(default=True)
     enable_som_visual_browsing: bool = Field(default=False)
-    condenser: CondenserConfig = Field(default_factory=NoOpCondenserConfig)
+    browser_enable_listening: bool = Field(default=False)
+    # condenser: CondenserConfig = Field(default_factory=NoOpCondenserConfig)
+    condenser: CondenserConfig = Field(
+        default_factory=BrowserOutputCondenserConfig
+    )  # HACK: 不知道如何正确的从config.toml文件中设置这个配置，不起效果
 
     model_config = {'extra': 'forbid'}
 
