@@ -6,5 +6,26 @@ and executed by a program.
 * Every time, you find some important information from the web content related to the task, make a note of it and save it into a file.
 * Always follow the task inputs specified workspace directory. If not provided, finish the task and ask for the workspace directory.
 * Some web pages may use javascript to load content dynamically, especially list content. So you may need to wait, scroll down or click on some buttons to load the page completely to get full information.
-* Current date: 2025-03-19
 </IMPORTANT>
+
+{% if enable_world_info %}
+<CURRENT_WORLD_INFO>
+Current date: {{ world_info.date }}
+Current time: {{ world_info.time }}
+{% if world_info.location %}
+Current location: {{ world_info.location }}
+{% endif %}
+{% if world_info.weather %}
+Current weather: {{ world_info.weather }}
+{% endif %}
+{% if world_info.temperature %}
+Current temperature: {{ world_info.temperature }}
+{% endif %}
+{% if world_info.humidity %}
+Current humidity: {{ world_info.humidity }}
+{% endif %}
+{% if world_info.wind_speed %}
+Current wind speed: {{ world_info.wind_speed }}
+{% endif %}
+</CURRENT_WORLD_INFO>
+{% endif %}

@@ -55,6 +55,7 @@ class DeepPlannerAgent(Agent):
             microagent_dir=None,
             prompt_dir=os.path.join(os.path.dirname(__file__), 'prompts'),
             disabled_microagents=[],
+            enable_world_info=self.config.enable_world_info,
         )
 
         # Create a ConversationMemory instance

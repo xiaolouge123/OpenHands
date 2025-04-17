@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import islice
 
 from jinja2 import Template
@@ -30,6 +31,23 @@ class RepositoryInfo:
     repo_directory: str | None = None
 
 
+@dataclass
+class WorldInfo:
+    date: str | None = None
+    time: str | None = None
+    location: str | None = None
+    weather: str | None = None
+    temperature: str | None = None
+    humidity: str | None = None
+    wind_speed: str | None = None
+
+    def __post_init__(self):
+        if self.date is None:
+            self.date = datetime.now().strftime('%Y-%m-%d')
+        if self.time is None:
+            self.time = datetime.now().strftime('%H:%M:%S')
+
+
 class PromptManager:
     """
     Manages prompt templates and micro-agents for AI interactions.
@@ -49,6 +67,7 @@ class PromptManager:
         prompt_dir: str,
         microagent_dir: str | None = None,
         disabled_microagents: list[str] | None = None,
+        **kwargs,
     ):
         self.disabled_microagents: list[str] = disabled_microagents or []
         self.prompt_dir: str = prompt_dir
@@ -63,6 +82,8 @@ class PromptManager:
 
         self.knowledge_microagents: dict[str, KnowledgeMicroAgent] = {}
         self.repo_microagents: dict[str, RepoMicroAgent] = {}
+        self.enable_world_info: bool = kwargs.get('enable_world_info', False)
+        self.world_info = WorldInfo()
 
         if microagent_dir:
             # This loads micro-agents from the microagent_dir
@@ -112,7 +133,9 @@ class PromptManager:
             return Template(file.read())
 
     def get_system_message(self) -> str:
-        return self.system_template.render().strip()
+        return self.system_template.render(
+            enable_world_info=self.enable_world_info, world_info=self.world_info
+        ).strip()
 
     def set_runtime_info(self, runtime: Runtime) -> None:
         self.runtime_info.available_hosts = runtime.web_hosts

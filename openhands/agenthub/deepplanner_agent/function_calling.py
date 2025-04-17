@@ -119,7 +119,6 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                     f'Tool {tool_call.function.name} is not registered. (arguments: {arguments}). Please check the tool name and retry with an existing tool.'
                 )
 
-            # We only add thought to the first action
             if i == 0:
                 action = combine_thought(action, thought)
             # Add metadata for tool calling

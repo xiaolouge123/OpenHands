@@ -52,6 +52,7 @@ class BrowserMonitorAgent(Agent):
             microagent_dir=None,
             prompt_dir=os.path.join(os.path.dirname(__file__), 'prompts'),
             disabled_microagents=[],
+            enable_world_info=self.config.enable_world_info,
         )
         self.conversation_memory = ConversationMemory(self.prompt_manager)
 

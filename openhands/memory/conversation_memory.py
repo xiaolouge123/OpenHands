@@ -73,10 +73,14 @@ class ConversationMemory:
         for event in events:
             # create a regular message from an event
             if isinstance(event, Action):
+                # logger.debug(f'Processing action: {event}')
                 messages_to_add = self._process_action(
                     action=event,
                     pending_tool_call_action_messages=pending_tool_call_action_messages,
                     vision_is_active=vision_is_active,
+                )
+                logger.debug(
+                    f'Pending tool call action messages: {pending_tool_call_action_messages}'
                 )
             elif isinstance(event, Observation):
                 messages_to_add = self._process_observation(
@@ -86,6 +90,7 @@ class ConversationMemory:
                     vision_is_active=vision_is_active,
                     enable_som_visual_browsing=enable_som_visual_browsing,
                 )
+                logger.debug(f'Tool call id to message: {tool_call_id_to_message}')
             else:
                 raise ValueError(f'Unknown event type: {type(event)}')
 
@@ -116,7 +121,7 @@ class ConversationMemory:
                 pending_tool_call_action_messages.pop(response_id)
 
             messages += messages_to_add
-
+        logger.debug(f'Conversation process_events messages: {messages}')
         return messages
 
     def process_initial_messages(self, with_caching: bool = False) -> list[Message]:
@@ -201,9 +206,11 @@ class ConversationMemory:
             pending_tool_call_action_messages[llm_response.id] = Message(
                 role=getattr(assistant_msg, 'role', 'assistant'),
                 # tool call content SHOULD BE a string
-                content=[TextContent(text=assistant_msg.content or '')]
-                if assistant_msg.content is not None
-                else [],
+                content=(
+                    [TextContent(text=assistant_msg.content or '')]
+                    if assistant_msg.content is not None
+                    else []
+                ),
                 tool_calls=assistant_msg.tool_calls,
             )
             return []

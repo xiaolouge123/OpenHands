@@ -42,7 +42,7 @@ class AgentConfig(BaseModel):
     condenser: CondenserConfig = Field(
         default_factory=BrowserOutputCondenserConfig
     )  # HACK: 不知道如何正确的从config.toml文件中设置这个配置，不起效果
-
+    enable_world_info: bool = Field(default=False)
     model_config = {'extra': 'forbid'}
 
     @classmethod
