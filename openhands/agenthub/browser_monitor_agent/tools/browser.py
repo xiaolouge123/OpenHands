@@ -14,9 +14,8 @@ _BROWSER_DESCRIPTION = """Interact with the browser using Python code. Use it ON
 See the description of "code" parameter for more details.
 
 Multiple actions are not allowed, because the browser will execute the actions sequentially without any feedback from the page.
-<IMPORTANT>
-    Always output the actions no more than 1 actions at a time.
-</IMPORTANT>
+Always output the actions no more than 1 actions at a time. Example:
+goto_and_listen('http://www.example.com')
 """
 
 _BROWSER_TOOL_DESCRIPTION = """

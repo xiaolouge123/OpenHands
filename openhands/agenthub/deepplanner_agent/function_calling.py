@@ -15,6 +15,7 @@ from openhands.core.exceptions import (
     FunctionCallNotExistsError,
     FunctionCallValidationError,
 )
+from openhands.core.logger import openhands_logger as logger
 from openhands.events.action import (
     Action,
     AgentDelegateAction,
@@ -113,7 +114,23 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
                         wait_for_response=True,
                     )
             elif tool_call.function.name == DelegateTool['function']['name']:
+                logger.info(f'DelegateTool tool call arguments: {arguments}')
+                if (
+                    isinstance(arguments, dict)
+                    and 'inputs' in arguments
+                    and isinstance(arguments['inputs'], str)
+                ):
+                    try:
+                        inputs = json.loads(arguments['inputs'])
+                        logger.info(f'DelegateTool tool call inputs: {inputs}')
+                        arguments['inputs'] = inputs
+                    except json.decoder.JSONDecodeError:
+                        logger.warning(
+                            f'Failed to parse DelegateTool tool call inputs arguments: {tool_call}'
+                        )
+                        continue
                 action = AgentDelegateAction(**arguments)
+                logger.info(f'AgentDelegateAction in response_to_actions: {action}')
             else:
                 raise FunctionCallNotExistsError(
                     f'Tool {tool_call.function.name} is not registered. (arguments: {arguments}). Please check the tool name and retry with an existing tool.'

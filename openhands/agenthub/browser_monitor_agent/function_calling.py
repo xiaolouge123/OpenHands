@@ -13,6 +13,7 @@ from litellm import (
 from openhands.agenthub.browser_monitor_agent.tools import (
     BrowserListenTool,
     BrowserTool,
+    CmdRunTool,
     FinishTool,
     StrReplaceEditorTool,
     WebReadTool,
@@ -165,7 +166,7 @@ def response_to_actions(response: ModelResponse) -> list[Action]:
 def get_tools(
     browser_enable_listening: bool = False,
 ) -> list[ChatCompletionToolParam]:
-    tools = [FinishTool, BrowserTool, StrReplaceEditorTool, WebReadTool]
+    tools = [FinishTool, BrowserTool, StrReplaceEditorTool, WebReadTool, CmdRunTool]
     if browser_enable_listening:
         tools.append(BrowserListenTool)
     return tools

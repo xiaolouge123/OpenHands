@@ -348,6 +348,8 @@ class AgentController:
             await self.start_delegate(action)
             assert self.delegate is not None
             # Post a MessageAction with the task for the delegate
+            logger.info('action: %s', action)
+            logger.info('action.inputs: %s', action.inputs)
             if 'task' in action.inputs:
                 self.event_stream.add_event(
                     MessageAction(content='TASK: ' + action.inputs['task']),

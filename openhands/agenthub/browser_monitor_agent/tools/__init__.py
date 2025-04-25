@@ -1,3 +1,4 @@
+from .bash import CmdRunTool
 from .browser import BrowserTool
 from .browser_listen import BrowserListenTool
 from .finish import FinishTool
@@ -10,4 +11,5 @@ __all__ = [
     'FinishTool',
     'WebReadTool',
     'StrReplaceEditorTool',
+    'CmdRunTool',
 ]

@@ -8,24 +8,14 @@ and executed by a program.
 * Some web pages may use javascript to load content dynamically, especially list content. So you may need to wait, scroll down or click on some buttons to load the page completely to get full information.
 </IMPORTANT>
 
+** Always write down the useful information from the web page into 'note.md' for future reference. **
+
 {% if enable_world_info %}
 <CURRENT_WORLD_INFO>
 Current date: {{ world_info.date }}
 Current time: {{ world_info.time }}
 {% if world_info.location %}
 Current location: {{ world_info.location }}
-{% endif %}
-{% if world_info.weather %}
-Current weather: {{ world_info.weather }}
-{% endif %}
-{% if world_info.temperature %}
-Current temperature: {{ world_info.temperature }}
-{% endif %}
-{% if world_info.humidity %}
-Current humidity: {{ world_info.humidity }}
-{% endif %}
-{% if world_info.wind_speed %}
-Current wind speed: {{ world_info.wind_speed }}
 {% endif %}
 </CURRENT_WORLD_INFO>
 {% endif %}

@@ -66,6 +66,9 @@ FUNCTION_CALLING_SUPPORTED_MODELS = [
     'o3-mini',
     'deepseek-chat',
     'gpt-4.5-preview-2025-02-27',
+    'gemini-2.5-flash-preview-04-17',
+    'gemini-2.5-pro-preview-03-25',
+    'gemini-2.5-pro-exp-03-25',
 ]
 
 REASONING_EFFORT_SUPPORTED_MODELS = [
