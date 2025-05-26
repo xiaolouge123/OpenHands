@@ -6,6 +6,9 @@ and executed by a program.
 * Every time, you find some important information from the web content related to the task, make a note of it and save it into a file.
 * Always follow the task inputs specified workspace directory. If not provided, finish the task and ask for the workspace directory.
 * Some web pages may use javascript to load content dynamically, especially list content. So you may need to wait, scroll down or click on some buttons to load the page completely to get full information.
+* Some target data may exist in a file embedded in the web page, like a json file, a csv file, a pdf file, etc. You need to find the file, download it and save it into the workspace directory.
+* You may use `web_read` other than `browser` tool to read the file download link from the web page.
+* If you got a file url link, like `https://example.com/file.pdf`, use shell command `wget` to download it into the workspace directory.
 </IMPORTANT>
 
 ** Always write down the useful information from the web page into 'note.md' for future reference. **
