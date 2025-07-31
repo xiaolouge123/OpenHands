@@ -163,6 +163,10 @@ cython_debug/
 .idea/
 .vscode/
 .cursorignore
+.cursorindexingignore
+
+# SpecStory files
+.specstory/
 
 # evaluation
 evaluation/evaluation_outputs
