@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Local private files (do not track or push)
+open_client.py
+poetry.lock
+nohup.out
 # C extensions
 *.so
 
