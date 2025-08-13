@@ -8,14 +8,14 @@ on:
 
 jobs:
   stale:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     steps:
       - uses: actions/stale@v9
         with:
           stale-issue-message: 'This issue is stale because it has been open for 30 days with no activity. Remove stale label or comment or this will be closed in 7 days.'
           stale-pr-message: 'This PR is stale because it has been open for 30 days with no activity. Remove stale label or comment or this will be closed in 7 days.'
           days-before-stale: 30
-          exempt-issue-labels: 'tracked'
+          exempt-issue-labels: 'roadmap'
           close-issue-message: 'This issue was closed because it has been stalled for over 30 days with no activity.'
           close-pr-message: 'This PR was closed because it has been stalled for over 30 days with no activity.'
           days-before-close: 7

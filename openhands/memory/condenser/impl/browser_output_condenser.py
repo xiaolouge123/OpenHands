@@ -4,7 +4,7 @@ from openhands.core.config.condenser_config import BrowserOutputCondenserConfig
 from openhands.events.event import Event
 from openhands.events.observation import BrowserOutputObservation
 from openhands.events.observation.agent import AgentCondensationObservation
-from openhands.memory.condenser.condenser import Condenser
+from openhands.memory.condenser.condenser import Condensation, Condenser, View
 
 
 class BrowserOutputCondenser(Condenser):
@@ -17,33 +17,32 @@ class BrowserOutputCondenser(Condenser):
         self.attention_window = attention_window
         super().__init__()
 
-    def condense(self, events: list[Event]) -> list[Event]:
+    def condense(self, view: View) -> View | Condensation:
         """Replace the content of browser observations outside of the attention window with a placeholder."""
         results: list[Event] = []
         cnt: int = 0
-        for event in reversed(events):
+        for event in reversed(view):
             if (
                 isinstance(event, BrowserOutputObservation)
                 and cnt >= self.attention_window
             ):
-                obs = AgentCondensationObservation(
-                    f'Current URL: {event.url}\nContent Omitted'
+                results.append(
+                    AgentCondensationObservation(
+                        f'Visited URL {event.url}\nContent omitted'
+                    )
                 )
-                if event.tool_call_metadata is not None:
-                    obs.tool_call_metadata = event.tool_call_metadata  # 如果这里不添加tool_call_metadata，那么经过condenser的observation event事件对应的action事件，在后续conversation_memory处理时会被丢掉，因为tool call的action找不到与之tool call id对应的observation了，所以context上会出现，只有tool的observation结果，却没有assistant发起tool call的那个回答轮次。
-                results.append(obs)
             else:
                 results.append(event)
                 if isinstance(event, BrowserOutputObservation):
                     cnt += 1
 
-        return list(reversed(results))
+        return View(events=list(reversed(results)))
 
     @classmethod
     def from_config(
         cls, config: BrowserOutputCondenserConfig
     ) -> BrowserOutputCondenser:
-        return BrowserOutputCondenser(**config.model_dump(exclude=['type']))
+        return BrowserOutputCondenser(**config.model_dump(exclude={'type'}))
 
 
 BrowserOutputCondenser.register_config(BrowserOutputCondenserConfig)

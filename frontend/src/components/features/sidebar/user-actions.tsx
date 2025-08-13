@@ -5,9 +5,10 @@ import { AccountSettingsContextMenu } from "../context-menu/account-settings-con
 interface UserActionsProps {
   onLogout: () => void;
   user?: { avatar_url: string };
+  isLoading?: boolean;
 }
 
-export function UserActions({ onLogout, user }: UserActionsProps) {
+export function UserActions({ onLogout, user, isLoading }: UserActionsProps) {
   const [accountContextMenuIsVisible, setAccountContextMenuIsVisible] =
     React.useState(false);
 
@@ -25,12 +26,15 @@ export function UserActions({ onLogout, user }: UserActionsProps) {
   };
 
   return (
-    <div data-testid="user-actions" className="w-8 h-8 relative">
-      <UserAvatar avatarUrl={user?.avatar_url} onClick={toggleAccountMenu} />
+    <div data-testid="user-actions" className="w-8 h-8 relative cursor-pointer">
+      <UserAvatar
+        avatarUrl={user?.avatar_url}
+        onClick={toggleAccountMenu}
+        isLoading={isLoading}
+      />
 
-      {accountContextMenuIsVisible && (
+      {accountContextMenuIsVisible && !!user && (
         <AccountSettingsContextMenu
-          isLoggedIn={!!user}
           onLogout={handleLogout}
           onClose={closeAccountMenu}
         />

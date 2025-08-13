@@ -9,13 +9,13 @@ from openhands.events.action import (
     FileReadAction,
     FileWriteAction,
     MessageAction,
+    RecallAction,
 )
 from openhands.events.action.action import ActionConfirmationStatus
 from openhands.events.action.files import FileEditSource, FileReadSource
 from openhands.events.serialization import (
     event_from_dict,
     event_to_dict,
-    event_to_memory,
 )
 
 
@@ -23,37 +23,21 @@ def serialization_deserialization(
     original_action_dict, cls, max_message_chars: int = 10000
 ):
     action_instance = event_from_dict(original_action_dict)
-    assert isinstance(
-        action_instance, Action
-    ), 'The action instance should be an instance of Action.'
-    assert isinstance(
-        action_instance, cls
-    ), f'The action instance should be an instance of {cls.__name__}.'
+    assert isinstance(action_instance, Action), (
+        'The action instance should be an instance of Action.'
+    )
+    assert isinstance(action_instance, cls), (
+        f'The action instance should be an instance of {cls.__name__}.'
+    )
 
     # event_to_dict is the regular serialization of an event
     serialized_action_dict = event_to_dict(action_instance)
 
     # it has an extra message property, for the UI
     serialized_action_dict.pop('message')
-    assert (
-        serialized_action_dict == original_action_dict
-    ), 'The serialized action should match the original action dict.'
-
-    # memory dict is what is sent to the LLM
-    serialized_action_memory = event_to_memory(action_instance, max_message_chars)
-    original_memory_dict = original_action_dict.copy()
-
-    # we don't send backend properties like id
-    original_memory_dict.pop('id', None)
-    original_memory_dict.pop('timestamp', None)
-    if 'args' in original_memory_dict:
-        original_memory_dict['args'].pop('blocking', None)
-        original_memory_dict['args'].pop('confirmation_state', None)
-
-    # the rest should match
-    assert (
-        serialized_action_memory == original_memory_dict
-    ), 'The serialized action in memory should match the original action dict.'
+    assert serialized_action_dict == original_action_dict, (
+        'The serialized action should match the original action dict.'
+    )
 
 
 def test_event_props_serialization_deserialization():
@@ -65,6 +49,7 @@ def test_event_props_serialization_deserialization():
         'args': {
             'content': 'This is a test.',
             'image_urls': None,
+            'file_urls': None,
             'wait_for_response': False,
         },
     }
@@ -77,6 +62,7 @@ def test_message_action_serialization_deserialization():
         'args': {
             'content': 'This is a test.',
             'image_urls': None,
+            'file_urls': None,
             'wait_for_response': False,
         },
     }
@@ -89,11 +75,34 @@ def test_agent_finish_action_serialization_deserialization():
         'args': {
             'outputs': {},
             'thought': '',
-            'task_completed': None,
             'final_thought': '',
         },
     }
     serialization_deserialization(original_action_dict, AgentFinishAction)
+
+
+def test_agent_finish_action_legacy_task_completed_serialization():
+    """Test that old conversations with task_completed can still be loaded."""
+    original_action_dict = {
+        'action': 'finish',
+        'args': {
+            'outputs': {},
+            'thought': '',
+            'final_thought': 'Task completed',
+            'task_completed': 'true',  # This should be ignored during deserialization
+        },
+    }
+    # This should work without errors - task_completed should be stripped out
+    event = event_from_dict(original_action_dict)
+    assert isinstance(event, Action)
+    assert isinstance(event, AgentFinishAction)
+    assert event.final_thought == 'Task completed'
+    # task_completed attribute should not exist anymore
+    assert not hasattr(event, 'task_completed')
+
+    # When serialized back, task_completed should not be present
+    event_dict = event_to_dict(event)
+    assert 'task_completed' not in event_dict['args']
 
 
 def test_agent_reject_action_serialization_deserialization():
@@ -114,6 +123,8 @@ def test_cmd_run_action_serialization_deserialization():
             'thought': '',
             'hidden': False,
             'confirmation_state': ActionConfirmationStatus.CONFIRMED,
+            'is_static': False,
+            'cwd': None,
         },
     }
     serialization_deserialization(original_action_dict, CmdRunAction)
@@ -122,7 +133,11 @@ def test_cmd_run_action_serialization_deserialization():
 def test_browse_url_action_serialization_deserialization():
     original_action_dict = {
         'action': 'browse',
-        'args': {'thought': '', 'url': 'https://www.example.com'},
+        'args': {
+            'thought': '',
+            'url': 'https://www.example.com',
+            'return_axtree': False,
+        },
     }
     serialization_deserialization(original_action_dict, BrowseURLAction)
 
@@ -134,6 +149,7 @@ def test_browse_interactive_action_serialization_deserialization():
             'thought': '',
             'browser_actions': 'goto("https://www.example.com")',
             'browsergym_send_msg_to_user': '',
+            'return_axtree': False,
         },
     }
     serialization_deserialization(original_action_dict, BrowseInteractiveAction)
@@ -354,6 +370,18 @@ def test_file_ohaci_edit_action_legacy_serialization():
     assert event_dict['args']['content'] == ''
     assert event_dict['args']['start'] == 1
     assert event_dict['args']['end'] == -1
+
+
+def test_agent_microagent_action_serialization_deserialization():
+    original_action_dict = {
+        'action': 'recall',
+        'args': {
+            'query': 'What is the capital of France?',
+            'thought': 'I need to find information about France',
+            'recall_type': 'knowledge',
+        },
+    }
+    serialization_deserialization(original_action_dict, RecallAction)
 
 
 def test_file_read_action_legacy_serialization():
